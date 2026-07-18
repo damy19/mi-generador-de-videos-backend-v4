@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                   Int           @id @default(autoincrement())
+  nombre               String
+  email                String        @unique
+  password             String
+  creditos             Int           @default(10)
+  tokens               Int           @default(30)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  plan                 String        @default("FREE")
+  createdAt            DateTime      @default(now())
+  videos               Video[]
+  transacciones        Transaction[]
+  checkouts            Checkout[]
+
+  @@map("users")
+}
+
+model Video {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  temaOriginal String
+  duracion     Int      @default(0)
+  guion        String
+  urlAudio     String?
+  urlVideo     String?
+
+  // Compatibilidad con lógica anterior (Fal)
+  falRequestId String?
+
+  // Nuevo: identificar proveedor para polling/estado
+  provider     String   @default("fal")
+  klingTaskId  String?
+
+  estado       String   @default("pendiente")
+  createdAt    DateTime @default(now())
+
+  @@map("videos")
+}
+
+
+model Transaction {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tipo      String
+  cantidad  Int
+  createdAt DateTime @default(now())
+
+  @@map("transacciones")
+}
+
+model Checkout {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lemonCheckoutId String   @unique
+  url             String
+  status          String   @default("CREATED")
+  productId       String?
+  variantId       String?
+  testMode        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@map("checkouts")
+}
