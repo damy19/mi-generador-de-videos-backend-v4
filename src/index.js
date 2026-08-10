@@ -9,7 +9,6 @@ const userRoutes = require("./routes/userRoutes");
 const authRoutes = require("./routes/authRoutes");
 const videoRoutes = require("./routes/videoRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
-const checkoutRoutes = require("./routes/checkoutRoutes");
 const webhookRoutes = require("./routes/webhookRoutes");
 const { startFalPendingPoller } = require("./controllers/videoController");
 
@@ -25,12 +24,12 @@ app.use(cors());
 
 // ⚠️ IMPORTANTE: Registrar webhook ANTES de express.json()
 // Configuramos express.raw para capturar los bytes puros y guardarlos en req.rawBody.
-// Esto permite que el webhookController valide la firma HMAC sin que el body se rompa.
+// Esto permite que el webhookController valide la firma Paddle-Signature sin que el body se rompa.
 app.use(
   "/api/webhook",
   express.raw({ type: "application/json" }),
   (req, res, next) => {
-    req.rawBody = req.body; // Guardamos el buffer crudo para crypto.timingSafeEqual
+    req.rawBody = req.body; // Guardamos el buffer crudo para la verificación de firma
     next();
   },
   webhookRoutes
@@ -44,7 +43,6 @@ app.use("/api", statusRoutes); // GET /api/status
 app.use("/api", userRoutes);   // GET /api/usuarios
 app.use("/api/auth", authRoutes); // POST /api/auth/signup, /api/auth/login
 app.use("/api/videos", videoRoutes); // POST /api/videos/crear, GET /api/videos/mis-videos
-app.use("/api/checkout", checkoutRoutes); // POST /api/checkout/custom-pack
 app.use("/api/transactions", transactionRoutes); // GET /api/transactions/mis-transacciones
 
 // Ruta raíz para verificación rápida
@@ -87,7 +85,7 @@ const startServer = async () => {
       console.log(`   - GET /api/videos/mis-videos - Obtener mis videos (protegida)`);
       console.log(`   - GET /api/videos/:videoId - Obtener un video específico (protegida)`);
       console.log(`   - GET /api/transactions/mis-transacciones - Obtener mis transacciones (protegida)`);
-      console.log(`   - POST /api/webhook - Webhook de Lemon Squeezy (Firma raw habilitada)\n`);
+      console.log(`   - POST /api/webhook - Webhook de Paddle (Firma raw habilitada)\n`);
       startFalPendingPoller();
     });
   } catch (error) {
@@ -104,3 +102,4 @@ process.on("SIGINT", async () => {
   await prisma.$disconnect();
   process.exit(0);
 });
+

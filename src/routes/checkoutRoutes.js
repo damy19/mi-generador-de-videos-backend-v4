@@ -1,10 +1,18 @@
 const express = require("express");
-const { verifyToken } = require("../middleware/authMiddleware");
 const { createCheckoutSession } = require("../controllers/checkoutController");
 
 const router = express.Router();
 
-// Ruta POST /api/checkout/custom-pack - Crear una sesión de pago de Lemon Squeezy
-router.post("/custom-pack", verifyToken, createCheckoutSession);
+/**
+ * ⚠️ MIGRADO A PADDLE CHECKOUT (client-side)
+ *
+ * El checkout ahora se abre desde el frontend con @paddle/paddle-js
+ * (ver frontend/src/lib/paddle.ts → openPaddleCheckout()).
+ *
+ * Este endpoint se mantiene solo como referencia; devuelve 410 Gone.
+ * Las rutas checkout ya NO se montan en index.js.
+ */
+router.post("/custom-pack", createCheckoutSession);
 
 module.exports = router;
+

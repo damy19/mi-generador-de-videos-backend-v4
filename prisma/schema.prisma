@@ -62,16 +62,16 @@ model Transaction {
 }
 
 model Checkout {
-  id              Int      @id @default(autoincrement())
-  userId          Int
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lemonCheckoutId String   @unique
-  url             String
-  status          String   @default("CREATED")
-  productId       String?
-  variantId       String?
-  testMode        Boolean  @default(false)
-  createdAt       DateTime @default(now())
+  id                   Int      @id @default(autoincrement())
+  userId               Int
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paddleTransactionId  String   @unique
+  url                  String?
+  status               String   @default("CREATED")
+  priceId              String?
+  subscriptionId       String?
+  testMode             Boolean  @default(false)
+  createdAt            DateTime @default(now())
 
   @@map("checkouts")
 }

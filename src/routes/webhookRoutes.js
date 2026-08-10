@@ -1,10 +1,11 @@
 const express = require("express");
-const { handleLemonSqueezyWebhook } = require("../controllers/webhookController");
+const { handlePaddleWebhook } = require("../controllers/webhookController");
 
 const router = express.Router();
 
-// Al estar mapeado en index.js como "/api/webhook",
-// la ruta raíz ("/") mapea directamente a la URL limpia que configuraste.
-router.post("/", handleLemonSqueezyWebhook);
+// Al estar montado en index.js como "/api/webhook",
+// la ruta raíz ("/") mapea a la URL limpia del webhook de Paddle.
+router.post("/", handlePaddleWebhook);
 
 module.exports = router;
+
