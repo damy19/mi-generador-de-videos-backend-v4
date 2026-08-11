@@ -1,17 +1,14 @@
 /**
  * Mapeo de planes/precios de Paddle.
- *
- * Los Price IDs deben estar definidos en backend/.env:
- *   PADDLE_PRICE_STARTER
- *   PADDLE_PRICE_CREATOR
- *   PADDLE_PRICE_PRO
- *   PADDLE_PRICE_BUSINESS
+ * 
+ * Se usan los variables de entorno de Render si existen;
+ * de lo contrario, toma los Price IDs reales de Paddle Sandbox.
  */
 
-const PADDLE_PRICE_STARTER = process.env.PADDLE_PRICE_STARTER;
-const PADDLE_PRICE_CREATOR = process.env.PADDLE_PRICE_CREATOR;
-const PADDLE_PRICE_PRO = process.env.PADDLE_PRICE_PRO;
-const PADDLE_PRICE_BUSINESS = process.env.PADDLE_PRICE_BUSINESS;
+const PADDLE_PRICE_STARTER = process.env.PADDLE_PRICE_STARTER || "pri_01kzav98948zzkb382m5sk9kb2";
+const PADDLE_PRICE_CREATOR = process.env.PADDLE_PRICE_CREATOR || "pri_01kzavjw57gr47f0w5wfgfrbdn";
+const PADDLE_PRICE_PRO = process.env.PADDLE_PRICE_PRO || "pri_01kzay4stvw017xshgnf8japcc";
+const PADDLE_PRICE_BUSINESS = process.env.PADDLE_PRICE_BUSINESS || "pri_01kzaya72s4pm17v9hy6w54hn1";
 
 const PLANS = [
   {
@@ -45,7 +42,7 @@ const PLANS = [
   },
 ];
 
-// priceId -> tokens (solo planes con priceId configurado)
+// Mapeo dinámico priceId -> tokens
 const PRICE_ID_TO_TOKENS = PLANS.reduce((acc, plan) => {
   if (plan.priceId) acc[plan.priceId] = plan.tokens;
   return acc;
