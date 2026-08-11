@@ -172,6 +172,9 @@ const handleSubscriptionPlan = async (subscription) => {
 };
 
 const handlePaddleWebhook = async (req, res) => {
+  console.log("--> Webhook recibido de Paddle:", JSON.stringify(req.body, null, 2));
+  console.log("--> Custom Data:", req.body.data?.custom_data);
+  console.log("--> Event Type:", req.body.event_type);
   try {
     if (!paddleClient) {
       console.error("❌ No se configuró PADDLE_API_KEY en el backend.");
