@@ -48,7 +48,7 @@ const obtenerUsuario = async (userIdFromCustomData, customerId) => {
       if (customer?.email) {
         const cleanEmail = customer.email.trim().toLowerCase();
         console.log(`🔍 Buscando usuario por fallback de email: ${cleanEmail}`);
-        
+
         const user = await prisma.user.findFirst({
           where: {
             email: {
@@ -72,7 +72,6 @@ const obtenerUsuario = async (userIdFromCustomData, customerId) => {
 
 const handleTransactionCompleted = async (transaction) => {
   const transactionId = transaction.id;
-  // Intenta leer user_id o userId
   const userIdFromCustomData =
     transaction.customData?.user_id || transaction.customData?.userId;
   const customerId = transaction.customerId;
@@ -90,9 +89,9 @@ const handleTransactionCompleted = async (transaction) => {
     return;
   }
 
-  // Idempotencia: previene doble acreditación
-  const existing = await prisma.checkout.findUnique({
-    where: { paddleTransactionId: transactionId },
+  // Idempotencia: busca por el campo existente en el esquema de Prisma (lemonCheckoutId)
+  const existing = await prisma.checkout.findFirst({
+    where: { lemonCheckoutId: transactionId },
   });
 
   if (existing && existing.status === "PAID") {
@@ -109,7 +108,7 @@ const handleTransactionCompleted = async (transaction) => {
     return;
   }
 
-  // Acreditar tokens de forma segura (si era NULL, suma a 0)
+  // Acreditar tokens
   const currentTokens = usuario.tokens || 0;
   await prisma.user.update({
     where: { id: usuario.id },
@@ -142,7 +141,7 @@ const handleTransactionCompleted = async (transaction) => {
     await prisma.checkout.create({
       data: {
         userId: usuario.id,
-        paddleTransactionId: transactionId,
+        lemonCheckoutId: transactionId,
         url: checkoutUrl,
         status: "PAID",
         priceId,
