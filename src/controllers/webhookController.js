@@ -23,12 +23,10 @@ if (PADDLE_API_KEY) {
   });
 }
 
-const TEST_MODE = Boolean(PADDLE_API_KEY && PADDLE_API_KEY.startsWith("test_"));
-
 /**
  * Resuelve el usuario de Prisma.
  * 1) Por el user_id de customData.
- * 2) Fallback: buscando el email del customer en Paddle (case-insensitive).
+ * 2) Fallback: buscando el email del customer en Paddle.
  */
 const obtenerUsuario = async (userIdFromCustomData, customerId) => {
   if (userIdFromCustomData) {
@@ -76,7 +74,6 @@ const handleTransactionCompleted = async (transaction) => {
     transaction.customData?.user_id || transaction.customData?.userId;
   const customerId = transaction.customerId;
   const priceId = transaction.items?.[0]?.price?.id || null;
-  const subscriptionId = transaction.subscriptionId;
 
   const tokensAInyectar = getTokensForPriceId(priceId);
   console.log(
@@ -89,13 +86,15 @@ const handleTransactionCompleted = async (transaction) => {
     return;
   }
 
-  // Idempotencia: busca por el campo existente en el esquema de Prisma (lemonCheckoutId)
-  const existing = await prisma.checkout.findFirst({
-    where: { lemonCheckoutId: transactionId },
+  // Idempotencia utilizando la tabla Transaction
+  const existingTx = await prisma.transaction.findFirst({
+    where: {
+      tipo: `PADDLE_${transactionId}`,
+    },
   });
 
-  if (existing && existing.status === "PAID") {
-    console.log(`⏭️  Transacción ${transactionId} ya procesada (PAID).`);
+  if (existingTx) {
+    console.log(`⏭️ Transacción ${transactionId} ya fue acreditada anteriormente.`);
     return;
   }
 
@@ -108,51 +107,24 @@ const handleTransactionCompleted = async (transaction) => {
     return;
   }
 
-  // Acreditar tokens
+  // 1. Acreditar tokens
   const currentTokens = usuario.tokens || 0;
   await prisma.user.update({
     where: { id: usuario.id },
     data: { tokens: currentTokens + tokensAInyectar },
   });
 
-  // Registrar transacción interna
+  // 2. Registrar la transacción con el ID único para evitar dupliques
   await prisma.transaction.create({
     data: {
       userId: usuario.id,
-      tipo: "COMPRA_PADDLE",
+      tipo: `PADDLE_${transactionId}`,
       cantidad: tokensAInyectar,
     },
   });
 
-  // Guardar / actualizar checkout
-  const checkoutUrl = transaction.checkout?.url || null;
-
-  if (existing) {
-    await prisma.checkout.update({
-      where: { id: existing.id },
-      data: {
-        status: "PAID",
-        priceId,
-        subscriptionId,
-        url: existing.url || checkoutUrl,
-      },
-    });
-  } else {
-    await prisma.checkout.create({
-      data: {
-        userId: usuario.id,
-        lemonCheckoutId: transactionId,
-        url: checkoutUrl,
-        status: "PAID",
-        priceId,
-        subscriptionId,
-        testMode: TEST_MODE,
-      },
-    });
-  }
-
   console.log(
-    `✅ Tokens acreditados +${tokensAInyectar} al usuario ${usuario.id} (${usuario.email}).`
+    `🎉 Tokens acreditados (+${tokensAInyectar}) al usuario ${usuario.id} (${usuario.email}).`
   );
 };
 
