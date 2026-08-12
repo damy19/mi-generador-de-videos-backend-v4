@@ -27,15 +27,18 @@ const TEST_MODE = Boolean(PADDLE_API_KEY && PADDLE_API_KEY.startsWith("test_"));
 
 /**
  * Resuelve el usuario de Prisma.
- * 1) Por el user_id que se envió en customData al abrir el checkout.
- * 2) Fallback: buscando el email del customer en la API de Paddle.
+ * 1) Por el user_id de customData.
+ * 2) Fallback: buscando el email del customer en Paddle (case-insensitive).
  */
 const obtenerUsuario = async (userIdFromCustomData, customerId) => {
   if (userIdFromCustomData) {
     const parsed = parseInt(userIdFromCustomData, 10);
     if (!Number.isNaN(parsed)) {
       const user = await prisma.user.findUnique({ where: { id: parsed } });
-      if (user) return user;
+      if (user) {
+        console.log(`✅ Usuario encontrado por customData.user_id: ${user.id}`);
+        return user;
+      }
     }
   }
 
@@ -43,10 +46,21 @@ const obtenerUsuario = async (userIdFromCustomData, customerId) => {
     try {
       const customer = await paddleClient.customers.get(customerId);
       if (customer?.email) {
-        const user = await prisma.user.findUnique({
-          where: { email: customer.email },
+        const cleanEmail = customer.email.trim().toLowerCase();
+        console.log(`🔍 Buscando usuario por fallback de email: ${cleanEmail}`);
+        
+        const user = await prisma.user.findFirst({
+          where: {
+            email: {
+              equals: cleanEmail,
+              mode: "insensitive",
+            },
+          },
         });
-        if (user) return user;
+        if (user) {
+          console.log(`✅ Usuario encontrado por email: ${user.id}`);
+          return user;
+        }
       }
     } catch (customerError) {
       console.error("❌ Error obteniendo customer de Paddle:", customerError.message);
@@ -56,20 +70,19 @@ const obtenerUsuario = async (userIdFromCustomData, customerId) => {
   return null;
 };
 
-/**
- * transaction.completed: cubre pagos únicos, la primera factura de una
- * suscripción y las renovaciones mensuales. Acredita tokens según el Price ID.
- */
 const handleTransactionCompleted = async (transaction) => {
   const transactionId = transaction.id;
-  const userIdFromCustomData = transaction.customData?.user_id;
+  // Intenta leer user_id o userId
+  const userIdFromCustomData =
+    transaction.customData?.user_id || transaction.customData?.userId;
   const customerId = transaction.customerId;
   const priceId = transaction.items?.[0]?.price?.id || null;
   const subscriptionId = transaction.subscriptionId;
 
   const tokensAInyectar = getTokensForPriceId(priceId);
   console.log(
-    `💳 transaction.completed: ${transactionId}, priceId=${priceId}, tokens=${tokensAInyectar}`
+    `💳 transaction.completed: ${transactionId}, priceId=${priceId}, tokens=${tokensAInyectar}, customData=`,
+    transaction.customData
   );
 
   if (tokensAInyectar <= 0) {
@@ -77,7 +90,7 @@ const handleTransactionCompleted = async (transaction) => {
     return;
   }
 
-  // Idempotencia: si ya procesamos esta transacción, no volvemos a acreditar.
+  // Idempotencia: previene doble acreditación
   const existing = await prisma.checkout.findUnique({
     where: { paddleTransactionId: transactionId },
   });
@@ -90,15 +103,17 @@ const handleTransactionCompleted = async (transaction) => {
   const usuario = await obtenerUsuario(userIdFromCustomData, customerId);
   if (!usuario) {
     console.error(
-      `❌ No se encontró el usuario para la transacción ${transactionId}.`
+      `❌ No se encontró usuario para la transacción ${transactionId}. customData:`,
+      transaction.customData
     );
     return;
   }
 
-  // Acreditar tokens
+  // Acreditar tokens de forma segura (si era NULL, suma a 0)
+  const currentTokens = usuario.tokens || 0;
   await prisma.user.update({
     where: { id: usuario.id },
-    data: { tokens: { increment: tokensAInyectar } },
+    data: { tokens: currentTokens + tokensAInyectar },
   });
 
   // Registrar transacción interna
@@ -110,7 +125,7 @@ const handleTransactionCompleted = async (transaction) => {
     },
   });
 
-  // Guardar / actualizar el checkout (idempotente)
+  // Guardar / actualizar checkout
   const checkoutUrl = transaction.checkout?.url || null;
 
   if (existing) {
@@ -142,13 +157,10 @@ const handleTransactionCompleted = async (transaction) => {
   );
 };
 
-/**
- * subscription.activated / subscription.created:
- * actualiza el plan del usuario según el Price ID de la suscripción.
- */
 const handleSubscriptionPlan = async (subscription) => {
   const priceId = subscription.items?.[0]?.price?.id || null;
-  const userIdFromCustomData = subscription.customData?.user_id;
+  const userIdFromCustomData =
+    subscription.customData?.user_id || subscription.customData?.userId;
   const customerId = subscription.customerId;
 
   const plan = getPlanForPriceId(priceId);
@@ -159,7 +171,7 @@ const handleSubscriptionPlan = async (subscription) => {
 
   const usuario = await obtenerUsuario(userIdFromCustomData, customerId);
   if (!usuario) {
-    console.error("❌ No se encontró el usuario para actualizar el plan.");
+    console.error("❌ No se encontró usuario para actualizar plan.");
     return;
   }
 
@@ -168,33 +180,24 @@ const handleSubscriptionPlan = async (subscription) => {
     data: { plan: plan.key },
   });
 
-  console.log(`✅ Plan actualizado a ${plan.key} para el usuario ${usuario.id}.`);
+  console.log(`✅ Plan actualizado a ${plan.key} para usuario ${usuario.id}.`);
 };
 
 const handlePaddleWebhook = async (req, res) => {
-  console.log("--> Webhook recibido de Paddle:", JSON.stringify(req.body, null, 2));
-  console.log("--> Custom Data:", req.body.data?.custom_data);
-  console.log("--> Event Type:", req.body.event_type);
   try {
     if (!paddleClient) {
       console.error("❌ No se configuró PADDLE_API_KEY en el backend.");
-      return res.status(500).json({
-        error: "Falta configurar PADDLE_API_KEY en backend/.env.",
-      });
+      return res.status(500).json({ error: "Falta PADDLE_API_KEY" });
     }
 
     if (!PADDLE_WEBHOOK_SECRET_KEY) {
-      console.error("❌ No se configuró PADDLE_WEBHOOK_SECRET_KEY en el backend.");
-      return res.status(500).json({
-        error: "Falta configurar PADDLE_WEBHOOK_SECRET_KEY en backend/.env.",
-      });
+      console.error("❌ No se configuró PADDLE_WEBHOOK_SECRET_KEY.");
+      return res.status(500).json({ error: "Falta PADDLE_WEBHOOK_SECRET_KEY" });
     }
 
     if (!req.rawBody) {
-      console.error("❌ No se recibió el rawBody en la petición.");
-      return res.status(400).json({
-        error: "Falta el cuerpo crudo de la petición",
-      });
+      console.error("❌ No se recibió rawBody.");
+      return res.status(400).json({ error: "Falta rawBody" });
     }
 
     const signature = req.get("Paddle-Signature") || "";
@@ -202,14 +205,13 @@ const handlePaddleWebhook = async (req, res) => {
       ? req.rawBody.toString("utf8")
       : String(req.rawBody);
 
-    // Valida integridad y firma (Paddle-Signature) y devuelve el evento tipado.
     const eventData = await paddleClient.webhooks.unmarshal(
       rawRequestBody,
       PADDLE_WEBHOOK_SECRET_KEY,
       signature
     );
 
-    console.log(`🔔 Webhook de Paddle recibido: ${eventData.eventType}`);
+    console.log(`🔔 Webhook recibido: ${eventData.eventType}`);
 
     switch (eventData.eventType) {
       case EventName.TransactionCompleted:
@@ -225,18 +227,13 @@ const handlePaddleWebhook = async (req, res) => {
         console.log(`ℹ️ Evento ignorado: ${eventData.eventType}`);
     }
 
-    // Paddle necesita un 200 OK para confirmar la recepción.
-    res.status(200).send("Webhook procesado correctamente");
+    res.status(200).send("OK");
   } catch (error) {
-    console.error("❌ Error en el Webhook de Paddle:", error);
-    res.status(400).json({
-      error: "Firma inválida o error procesando el webhook.",
-      detalles: error.message,
-    });
+    console.error("❌ Error en Webhook de Paddle:", error);
+    res.status(400).json({ error: error.message });
   }
 };
 
 module.exports = {
   handlePaddleWebhook,
 };
-
