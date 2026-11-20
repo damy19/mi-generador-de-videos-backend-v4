@@ -5,7 +5,6 @@ const prisma = require("./config/prisma");
 
 // Importar rutas
 const statusRoutes = require("./routes/statusRoutes");
-const userRoutes = require("./routes/userRoutes");
 const authRoutes = require("./routes/authRoutes");
 const videoRoutes = require("./routes/videoRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
@@ -40,7 +39,6 @@ app.use(express.json());
 
 // Rutas de la API
 app.use("/api", statusRoutes); // GET /api/status
-app.use("/api", userRoutes);   // GET /api/usuarios
 app.use("/api/auth", authRoutes); // POST /api/auth/signup, /api/auth/login
 app.use("/api/videos", videoRoutes); // POST /api/videos/crear, GET /api/videos/mis-videos
 app.use("/api/transactions", transactionRoutes); // GET /api/transactions/mis-transacciones
@@ -78,7 +76,6 @@ const startServer = async () => {
       console.log(`📝 Rutas disponibles:`);
       console.log(`   - GET / - Información del servidor`);
       console.log(`   - GET /api/status - Estado del servidor`);
-      console.log(`   - GET /api/usuarios - Lista de usuarios (desde Supabase)`);
       console.log(`   - POST /api/auth/signup - Registro de usuarios`);
       console.log(`   - POST /api/auth/login - Inicio de sesión`);
       console.log(`   - POST /api/videos/crear - Crear un nuevo video (protegida)`);
